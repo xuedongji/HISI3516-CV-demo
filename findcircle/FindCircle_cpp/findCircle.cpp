@@ -26,29 +26,29 @@ bool findcircle(Mat& grayImg,float WH_ERR,float CR_ERR,float CH_ERR,int MY_BINAR
 	++frameID;
 	bool isfind = false;
 
-	//��˹�˲�
+	//高斯滤波
 	GaussianBlur(grayImg, grayImg, Size(5, 5), 2, 2);
 
 	normalize(grayImg, grayImg, 0, 255, NORM_MINMAX, CV_8UC1);
-	//�̶���ֵ
-	threshold(grayImg, grayImg, MY_BINARY_TH, 255, CV_THRESH_BINARY); //��ֵ��
+	//固定阈值
+	threshold(grayImg, grayImg, MY_BINARY_TH, 255, CV_THRESH_BINARY); //二值化
 
-																	  //�������״ �����̫������ʱ����ͨosd�����Ŀ��
+
+	//卷积核形状 卷积核太大膨胀时会连通osd光标与目标
 	Mat element = getStructuringElement(MORPH_ELLIPSE, Size(7, 7), Point(-1, -1));
 	dilate(grayImg, grayImg, element);
 	erode(grayImg, grayImg, element);
 
-	//imshow("�������", grayImg);
-
-	//Ѱ����������
+	
+	//寻找所有轮廓
 	vector<vector<Point> > contours;
-	//ֻ��ȡ�����������������ʾ��ʽΪ�㼯
+	//只提取最外层轮廓、轮廓表示方式为点集
 	findContours(grayImg, contours, CV_RETR_EXTERNAL, CHAIN_APPROX_NONE);
-	//�趨��С���
+	//设定最小面积
 	double minArea = grayImg.rows * grayImg.cols / (SCALE_TH*SCALE_TH);
-	//��ѡ����
+	//候选轮廓
 	vector<vector<Point> > final_cont;
-	//���ɸѡ
+	//面积筛选
 	for (int i = 0; i < (int)contours.size(); ++i)
 	{
 		double area = contourArea(contours[i]);
@@ -56,30 +56,30 @@ bool findcircle(Mat& grayImg,float WH_ERR,float CR_ERR,float CH_ERR,int MY_BINAR
 			final_cont.push_back(contours[i]);
 		}
 	}
-	//�������������
+	//无面积达标的区域
 	if (final_cont.size() == 0)
 	{
 		//LOG(enInfo) << frameID << "  No target find , circle too small!\n";
 		return false;
 	}
-	//��Ӿ���
+	//外接矩形
 	vector<Rect> boundRect(final_cont.size());
-	//͹������
+	//凸包计算
 	vector<Point> hullpoints;
 	float aspectRatio = 0, conRecRatio = 0, conHullRatio = 0, dAspectRatio = 0, dConRecRatio = 0, dConHullRatio = 0;
 
 	int target = 0;
 	static unsigned int voteCount = 0;
-	//��ÿ��������м���
+	//对每个区域进行计算
 	for (int i = 0; i < (int)final_cont.size(); ++i)
 	{
 		boundRect[i] = boundingRect(Mat(final_cont[i]));
 		convexHull(Mat(final_cont[i]), hullpoints, true);
-		//��Ӿ��γ����  �����ӽ�1
+		//外接矩形长宽比  尽量接近1
 		aspectRatio = (float)boundRect[i].width / (float)boundRect[i].height;
-		//����Ӿ��ε������,�ж�����  �����ӽ� PI/4 
+		//与外接矩形的面积比,判断填充度  尽量接近 PI/4 
 		conRecRatio = (float)contourArea(final_cont[i]) / (float)boundRect[i].area();
-		//��͹��������ȣ��ж�Բ�Ĳ�ȱ�� �����ӽ�1
+		//与凸包的面积比，判断圆的残缺度 尽量接近1
 		conHullRatio = (float)contourArea(final_cont[i]) / (float)contourArea(hullpoints);
 
 		dAspectRatio = abs(1 - aspectRatio);
@@ -88,13 +88,13 @@ bool findcircle(Mat& grayImg,float WH_ERR,float CR_ERR,float CH_ERR,int MY_BINAR
 
 		if (dAspectRatio < WH_ERR && dConRecRatio < CR_ERR && dConHullRatio < CH_ERR)
 		{
-			//ɸѡ��ӽ�Բ������
-			//�ҵ�Ŀ��
+			//筛选最接近圆的区域
+			//鍤找到目标
 			isfind = true;
 			target = i;
 			if (voteCount >= 3)
 			{
-				//��ͼ�ͱ�����ĵ�
+				//画图和标记中心点
 
 				rectangle(grayImg,
 					Point(boundRect[target].x, boundRect[target].y),
