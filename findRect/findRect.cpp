@@ -75,6 +75,9 @@ double getSpacePointToPoint(cv::Point p1, cv::Point p2)
 	int b = p1.y - p2.y;
 	return sqrt(a * a + b * b);
 }
+
+
+
 int findLargestSquare(const vector<vector<cv::Point> >& squares, vector<cv::Point>& biggest_square)
 {
 	if (!squares.size()) return -1;
@@ -113,7 +116,13 @@ double getDistance(cv::Point pt1, cv::Point pt2)
 	return sqrt(dx*dx + dy*dy);
 }
 
-
+//求颜色差异
+bool colorJudge(const Vec3b& target, const Vec3b& color ,const int threshold)
+{
+	return abs(color[2] - target[2]) < threshold &&
+		abs(color[1] - target[1]) < threshold &&
+		abs(color[0] - target[0]) < threshold;
+}
 
 bool findRect(Mat& mat)
 {
@@ -165,8 +174,8 @@ bool findRect(Mat& mat)
 		//cout << area << endl;
 		if (area > minArea) {
 			final_cont.push_back(contours[i]);
-			Scalar color = Scalar(0,0,255);
-			drawContours(mat, contours, i, color,1, 8);
+			//Scalar color = Scalar(0,255,0);
+			//drawContours(mat, contours, i, color,1, 8);
 		}
 	}
 
@@ -189,7 +198,7 @@ bool findRect(Mat& mat)
 
 		for (int i = 0; i < polygon.size(); ++i)
 		{
-			circle(mat, polygon[i], 4, Scalar(0, 255, 0));
+			//circle(mat, polygon[i], 4, Scalar(0, 255, 0));
 		}
 		//筛选出各个角度都接近直角的凸四边形
 		bool isConvex = isContourConvex(Mat(polygon));
@@ -224,34 +233,61 @@ bool findRect(Mat& mat)
 			//要求最小角大于45度,用于检测正俯视
 			if (maxCosine < 0.7 && lines.size() == 4)
 			{
-				cout << frameID << "  Find target   " << endl;
-				//筛选最接近圆的区域
-				//找到目标
-				isfind = true;
-
-				if (voteCount > 2)
+				//计算出这四条边中 相邻两条边的交点，即物体的四个顶点
+				vector<cv::Point> vCorners;
+				for (int i = 0; i < lines.size(); i++)
 				{
-					//计算出这四条边中 相邻两条边的交点，即物体的四个顶点
-					vector<cv::Point> vCorners;
-					for (int i = 0; i < lines.size(); i++)
+					cv::Point cornor = computeIntersect(lines[i], lines[(i + 1) % lines.size()]);
+					vCorners.push_back(cornor);
+				}
+				int targetX = (vCorners[0].x + vCorners[2].x) / 2;
+				int targetY = (vCorners[0].y + vCorners[2].y) / 2;
+
+
+				//颜色判断
+				Vec3b target = Vec3b(0, 0, 255);
+				bool colorFlag = false;
+				int colorCnt = 0;
+				for (int i = targetX - 2; i < targetX + 2; ++i)
+				{
+					if (colorFlag) break;
+					for (int j = targetY - 2; j < targetY + 2; ++j)
 					{
-						cv::Point cornor = computeIntersect(lines[i], lines[(i + 1) % lines.size()]);
-						vCorners.push_back(cornor);
+						Vec3b color = mat.at<Vec3b>(j, i);
+						unsigned int colorSum = (unsigned int)color[0] + (unsigned int)color[1] + (unsigned int)color[2];
+						if (colorSum < 450) ++colorCnt;
+						//cout << idx << " " << (unsigned int)color[0] << " " << (unsigned int)color[1] << " " << (unsigned int)color[2] << endl;
+						if (colorJudge(target, color, 40))
+						{
+							colorFlag = true;
+							break;
+						}
 					}
-					int targetX = (vCorners[0].x + vCorners[2].x) / 2;
-					int targetY = (vCorners[0].y + vCorners[2].y) / 2;
+				}
+				cout << idx << " " << colorCnt << endl;
+				if (colorCnt >3)
+				{
+					cout << frameID << "  Find target   " << endl;
+					//找到目标
+					isfind = true;
+				}
+
+
+				if (voteCount > 2 && colorCnt >3)
+				{
+
 
 					cout << idx << "   x = " << targetX << "  y = " << targetY << endl;
 
 					char str[64] = { 0 };
 					sprintf(str, "%d x:%d y:%d", idx, targetX, targetY);
 					cv::Point mark = cv::Point(targetX+20, targetY);
-					putText(mat, str, mark, cv::FONT_HERSHEY_DUPLEX, 0.5, cv::Scalar(0, 0, 255), 1);
+					putText(mat, str, mark, cv::FONT_HERSHEY_DUPLEX, 0.5, cv::Scalar(0, 255, 0), 1);
 					
 					//绘制出四条边
 					for (int i = 0; i < vCorners.size(); i++)
 					{
-						line(mat, vCorners[i], vCorners[(i + 1) % vCorners.size()], Scalar(0, 0, 255), 2);
+						line(mat, vCorners[i], vCorners[(i + 1) % vCorners.size()], Scalar(0, 255,0), 2);
 					}
 				}
 			}
